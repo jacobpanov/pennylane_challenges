@@ -1,6 +1,8 @@
 import json
 import pennylane as qml
 import pennylane.numpy as np
+dev = qml.device('default.qubit', wires = 2)
+
 def W(alpha, beta):
     """ This function returns the matrix W in terms of
     the coefficients alpha and beta
@@ -15,11 +17,17 @@ def W(alpha, beta):
         as defined in the challenge statement
     """
 
-    # Put your code here #
+    # Normalize the coefficients
+    norm = np.sqrt(alpha**2 + beta**2)
+    alpha /= norm
+    beta /= norm
 
-    # Return the real matrix of the unitary W, in terms of the coefficients.
-
-dev = qml.device('default.qubit', wires = 2)
+    # Define the unitary matrices U and V
+    a = np.sqrt(alpha)
+    b = np.sqrt(beta)
+    sqrt_sum = np.sqrt(alpha+beta)
+    w = (1 / sqrt_sum) * np.array([[a, -b], [b, a]])
+    return w
 
 @qml.qnode(dev)
 def linear_combination(U, V,  alpha, beta):
@@ -36,11 +44,16 @@ def linear_combination(U, V,  alpha, beta):
         -(numpy.tensor): Probabilities of measuring the computational
         basis states on the auxiliary wire. 
     """
-
     # Put your code here #
-    
+    w = W(alpha, beta)
+    qml.QubitUnitary(w, wires = 0)
+    qml.ControlledQubitUnitary(U, wires = 1, control_wires = 0, control_values = 0)
+    qml.ControlledQubitUnitary(V, wires = 1, control_wires = 0, control_values = 0)
+    qml.QubitUnitary(np.transpose(w), wires = 0)
     # Return the probabilities on the first wire
+    return qml.probs(wires = 0)
 
+    
 # These functions are responsible for testing the solution.
 
 def run(test_case_input: str) -> str:
