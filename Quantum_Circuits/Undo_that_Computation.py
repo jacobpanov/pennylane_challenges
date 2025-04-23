@@ -22,8 +22,11 @@ def AND(j, k):
 
     # Put your code here #
 
+    qml.Hadamard(wires=0)
+
     qml.ctrl(qml.PauliZ, control =[0, 1])(wires = [2])
-        
+
+    qml.Hadamard(wires=0)
 
     # Your code here #
 
