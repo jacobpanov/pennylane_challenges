@@ -75,7 +75,8 @@ def approximation_ratio(qaoa_depth, noise_param):
     Returns: 
         (float): The approximation ratio for the noisy QAOA.
     """
-    # random initialization of the variational parameters
+    # use a fixed seed for reproducible optimization
+    np.random.seed(1)
     params = np.random.uniform(0, 2 * np.pi, (qaoa_depth, 2))
 
     # cost function to minimize
