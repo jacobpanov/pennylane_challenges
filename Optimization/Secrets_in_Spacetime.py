@@ -30,12 +30,12 @@ def is_unsafe(alpha, beta, epsilon):
 
     """
     # Build the encoding matrix
-    enc_mat = np.array(qml.matrix(qml.prod(qml.RZ(alpha, wires=0), qml.RX(beta, wires=0))))
+    enc_mat = np.array(qml.matrix(qml.prod(qml.RZ(alpha, wires=0), qml.RX(beta, wires=0)))) # type: ignore
     # Check if the |0> state is unsafe
-    if np.abs(enc_mat[0,0])**2 >= 1-epsilon:
+    if np.abs(enc_mat[0,0])**2 >= 1-epsilon: # type: ignore
         return 'True'
     # Check if the |1> state is unsafe (using the largest eigenvalue for generality)
-    if np.abs(enc_mat[1,1]) * np.max(np.linalg.eigvals(enc_mat)) >= 1-epsilon:
+    if np.abs(enc_mat[1,1]) * np.max(np.linalg.eigvals(enc_mat)) >= 1-epsilon: # type: ignore
         return 'True'
     return 'False'
 
