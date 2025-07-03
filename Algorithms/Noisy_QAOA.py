@@ -13,51 +13,54 @@ cost_hamiltonian = qml.Hamiltonian(coeffs, ops)
 
 # Write any helper functions you need here
 
-dev = qml.device('default.mixed', wires = num_wires)
+dev = qml.device("default.mixed", wires=num_wires)
 
-@qml.qnode(dev) 
-def qaoa_circuit(params, noise_param):
-    """
-    Define the noisy QAOA circuit with only CNOT and rotation gates, with Depolarizing noise
-    in the target qubit of each CNOT gate.
+@qml.qnode(dev)
+def _qaoa_circuit(params, noise_param):
+    """Noisy QAOA circuit implemented with native rotations and noisy CNOTs.
 
     Args:
-        params(list(list(float))): A list with length equal to the QAOA depth. Each element is a list that contains 
-        the two QAOA parameters of each layer.
-        noise_param (float): The noise parameter associated with the depolarization gate.
+        params (list[list[float]]): QAOA parameters ``[[gamma_0, beta_0], ...]``.
+        noise_param (float): Depolarizing probability added after each CNOT.
 
-    Returns: 
-        (np.tensor): A numpy tensor of 1 element corresponding to the expectation value of the cost Hamiltonian.
+    Returns:
+        qml.numpy.tensor: Expectation value of the cost Hamiltonian.
     """
-    # Apply initial Hadamard gates to all qubits
-    for i in range(num_wires):
-        qml.RX(0.5 * np.pi, wires=i)
-        qml.RY(0.5 * np.pi, wires=i)
-        qml.RZ(0.5 * np.pi, wires=i)
 
-    # Apply QAOA layers
+    # Prepare the ``|+>`` state on all qubits using rotation gates only
+    for w in range(num_wires):
+        qml.RY(np.pi / 2, wires=w)
+
+    # Iterate over the QAOA layers
     for gamma, beta in params:
-        # Apply the cost Hamiltonian
-        # Single-qubit Z terms
-        for i, coeff in [(0, 0.5), (1, 0.5), (2, 1.25), (3, -0.25)]:
-            qml.RZ(2 * gamma * coeff, wires=i)
+        # ----- Cost Hamiltonian terms -----
+        # Single Z rotations
+        qml.RZ(2 * gamma * 0.5, wires=0)
+        qml.RZ(2 * gamma * 0.5, wires=1)
+        qml.RZ(2 * gamma * 1.25, wires=2)
+        qml.RZ(2 * gamma * -0.25, wires=3)
 
-        # Two-qubit ZZ terms
-        for j, coeff in [([0, 1], 0.75), ([0, 2], 0.75), ([1, 2], 0.75), ([2, 3], 0.75)]:
-            qml.CNOT(wires=[j[0], j[1]])
-            qml.RZ(2 * gamma * coeff, wires=j[1])
-            qml.CNOT(wires=[j[0], j[1]])
-            qml.DepolarizingChannel(noise_param, wires=j[1])
+        # ZZ interactions. Each CNOT is followed by a depolarizing channel.
+        for control, target in [(0, 1), (0, 2), (1, 2), (2, 3)]:
+            qml.CNOT(wires=[control, target])
+            qml.DepolarizingChannel(noise_param, wires=target)
+            qml.RZ(2 * gamma * 0.75, wires=target)
+            qml.CNOT(wires=[control, target])
+            qml.DepolarizingChannel(noise_param, wires=target)
 
-        # Apply the mixer Hamiltonian
-        for i in range(num_wires):
-            qml.RX(2 * beta, wires=i)
-            qml.RY(2 * 0.0001, wires=i)  # Explicitly include qml.RY
-            qml.RY(-2 *0.0001, wires=i)
-            qml.DepolarizingChannel(noise_param, wires=i)
+        # ----- Mixer Hamiltonian -----
+        for w in range(num_wires):
+            qml.RX(2 * beta, wires=w)
 
-    # Return the expectation value of the cost Hamiltonian
     return qml.expval(cost_hamiltonian)
+
+
+def qaoa_circuit(params, noise_param):
+    """Wrapper for ``_qaoa_circuit`` that stores the executed tape."""
+    res = _qaoa_circuit(params, noise_param)
+    if hasattr(_qaoa_circuit, "_tape") and _qaoa_circuit._tape is not None:
+        qaoa_circuit.qtape = _qaoa_circuit._tape
+    return res
 
 
 def approximation_ratio(qaoa_depth, noise_param):
@@ -72,30 +75,23 @@ def approximation_ratio(qaoa_depth, noise_param):
     Returns: 
         (float): The approximation ratio for the noisy QAOA.
     """
-    # Initialize parameters
+    # random initialization of the variational parameters
     params = np.random.uniform(0, 2 * np.pi, (qaoa_depth, 2))
-    qaoa_circuit(params, noise_param)
 
-    # Define the optimizer
-    opt = qml.RMSPropOptimizer(stepsize=0.05 if qaoa_depth == 1 else 0.1)
-    steps = 1000 if qaoa_depth == 1 else 500
+    # cost function to minimize
+    def cost(p):
+        return qaoa_circuit(p, noise_param)
 
-    # Define the cost function
-    def cost_func(params):
-        # Compute the expectation value of the noisy QAOA circuit
-        return qaoa_circuit(params, noise_param)
+    opt = qml.AdamOptimizer(0.1)
+    steps = 200 if qaoa_depth == 1 else 300
 
-    # Optimize the parameters
     for _ in range(steps):
-        params = opt.step(cost_func, params)
+        params = opt.step(cost, params)
 
-    # Compute the minimum expectation value of the noisy QAOA circuit
     noisy_min_expval = qaoa_circuit(params, noise_param)
 
-    # Compute the true minimum eigenvalue of the cost Hamiltonian
     true_min = np.min(np.linalg.eigvalsh(cost_hamiltonian.sparse_matrix().todense()))
 
-    # Compute the approximation ratio
     return noisy_min_expval / true_min
 
 
