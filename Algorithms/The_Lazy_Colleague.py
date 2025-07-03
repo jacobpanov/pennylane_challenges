@@ -19,11 +19,32 @@ def circuit(project_execution):
         (numpy.tensor): Measurement output in the 5 qubits after a shot.
     """
 
-    # Put your code here #
-    
+    # Build the initial state: equal superposition of the four states with a
+    # single zero and the result qubit in the |-> state. This is used as the
+    # state preparation ``A`` in amplitude amplification.
+    prep_state = np.zeros(2 ** 5)
+    amp = 1 / (2 * np.sqrt(2))
+    for bits in ["1110", "1101", "1011", "0111"]:
+        prep_state[int(bits + "0", 2)] = amp
+        prep_state[int(bits + "1", 2)] = -amp
+
+    qml.MottonenStatePreparation(prep_state, wires=wires)
+
+    # Single use of the oracle provided
     project_execution(wires=wires)
-    
-    # Put your code here #
+
+    # Reflection about the prepared state
+    qml.adjoint(qml.MottonenStatePreparation)(prep_state, wires=wires)
+    for w in wires:
+        qml.PauliX(wires=w)
+    qml.Hadamard(wires="result")
+    qml.MultiControlledX(wires=wires)
+    qml.Hadamard(wires="result")
+    for w in wires:
+        qml.PauliX(wires=w)
+    qml.MottonenStatePreparation(prep_state, wires=wires)
+
+    return qml.sample(wires=wires)
 
 def process_output(output):
     """This function will take the circuit measurement and process it to determine who is the lazy worker.
@@ -35,7 +56,10 @@ def process_output(output):
         (str): This function must return "e1", "e2" "e3" or "e4" - the lazy worker.
     """
 
-    # Put your code here #
+    # Identify the position of the zero among the first four qubits. The index
+    # corresponds to the lazy employee.
+    lazy = int(np.where(output[:4] == 0)[0][0]) + 1
+    return f"e{lazy}"
 
 # These functions are responsible for testing the solution.
 
